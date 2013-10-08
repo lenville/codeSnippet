@@ -1,9 +1,9 @@
 codeSnippet
 ===========
 
-##Some useful code snippets
+Some useful code snippets
 
-###Snippets List
+##Snippets List
 
 * add_listener.js
 * comparison.js

@@ -10,3 +10,4 @@ Some useful code snippets
 * create_namespace.js
 * event_handler.js
 * for_in_loop.js
+* counter.js

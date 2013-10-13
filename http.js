@@ -1,11 +1,13 @@
 /**http.js
- * Version : 0.1.0
+ * Version : 0.1.1
  * Authors : Lenville
  * Site: lenville.com 
- * New Features: 将get与post方法合并为ajax
- *               更正非JSON的get数据处理Bug
- *               精简代码，优化代码实现
+ * New Features: 变量定义迁至ajax内部
+ *               GET方法调整以及两种GET实现的支持调整
  * History:
+ *      0.1.0 将get与post方法合并为ajax
+ *            更正非JSON的get数据处理Bug
+ *            精简代码，优化代码实现
  *      0.0.3 修改0.0.2版本的post方法的控制方式改为传入options
  *            修改0.0.2版本的post方法的控制方式改为传入options
  *            优化代码实现
@@ -27,9 +29,6 @@ define (function (require, exports) {
 		_TIMEOUT = 10000,
 		_OVERTIME_CODE = 404,
 		_OVERTIME_MSG = "超时",
-		getMode, cbName, timer,
-		node, tempnode,
-		iframe, form, cfg = {},
 
 		/*↓Regular Expression*/
 		_RE_URL = /callback=\?/,
@@ -44,7 +43,7 @@ define (function (require, exports) {
 				_doc.getElementsByTagName("body")[0] ||
 				_doc.documentElement,
 
-		_elementCreate = function (element, parent, params) {
+		_createElement = function (element, parent, params) {
 			tempnode = _doc.createElement(element);
 			tempnode.id = [element, _count].join("_");
 			tempnode.name = [element, _count].join("_");
@@ -72,15 +71,19 @@ define (function (require, exports) {
 
 	/*Dora.ajax(url, [settings])*/
 	exports.ajax = function (url, config) {
+		var getMode, cbName, timer,
+			node, tempnode, iframe, form,
+			cfg = {};
+
 		$.extend(cfg, _config, config);
 		cbName = [cfg.method, _count++].join("_");
 
 		if (cfg.method === "POST") {
 
-			iframe = _elementCreate("iframe", _body, {
+			iframe = _createElement("iframe", _body, {
 				"style": "display: none"
 			});
-			form = _elementCreate("form", _body, {
+			form = _createElement("form", _body, {
 				"method": "post",
 				"action": url,
 				"target": ["iframe", _count].join("_")
@@ -96,7 +99,7 @@ define (function (require, exports) {
 					tempnode.type = "hidden";
 					tempnode.name = i;
 					tempnode.value = cfg.data[i];
-					_elementCreate("input", form, tempnode);
+					_createElement("input", form, tempnode);
 					tempnode = null;
 				}
 			}
@@ -123,30 +126,34 @@ define (function (require, exports) {
 				});
 			}, cfg.timeout);
 
-			
 		} else if (cfg.method === "GET") {
+
 			getMode = _RE_URL.test(url),	// 有callback为True，否则为False
 
-			node = _elementCreate("script", _head, {
-				"src": getMode ? url.replace("callback=?", "callback=" + cbName) : url,
-				"async": true,
-				"id": cbName,
-				"type": "text/javascript",
-				"charset": cfg.charset
-			});
-
+			node = _doc.createElement('script');
+			node.id = cbName;
+			node.async = true;
+			node.charset = cfg.charset;
 			node.onload = node.onerror = node.onreadystatechange = function() {
 				if (_RE_READY_STATE.test(node.readyState)) {
-					window[cbName] = function(){
-						clearTimeout(timer);
-						node.onload = node.onerror = node.onreadystatechange = null;
-						_head.removeChild(node);
-						node = undefined;
-						cfg.callback(window[cfg.context]);
-					};
 					window[cbName]();
 				}
 			};
+			node.src = getMode ? url.replace("callback=?", "callback=" + cbName) : url;
+
+			window[cbName] = function(data){
+				clearTimeout(timer);
+				node.onload = node.onerror = node.onreadystatechange = null;
+				_head.removeChild(node);
+				node = undefined;
+				if (getMode) {
+					cfg.callback(data);
+				} else {
+					cfg.callback(window[cfg.context]);
+				}
+			};
+
+			_head.appendChild(node);
 
 			timer = setTimeout(function(){
 				node.onload = node.onerror = node.onreadystatechange = null;

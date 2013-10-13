@@ -1,9 +1,10 @@
 /**http.js
- * Version : 0.1.2
+ * Version : 0.1.3
  * Authors : Lenville
  * Site: lenville.com 
- * New Features: Fix Bugs
+ * New Features: 改进GET方法功能
  * History:
+ *      0.1.2 Fix Bugs
  *      0.1.1 变量定义迁至ajax内部
  *            GET方法调整以及两种GET实现的支持调整
  *      0.1.0 将get与post方法合并为ajax
@@ -39,8 +40,9 @@ define (function (require, exports) {
                 _doc.documentElement,
 
         _createElement = function (element, parent, params) {
-            var tempnode = _doc.createElement(element);
-            for(var i in params){
+            var tempnode = _doc.createElement(element),
+                i;
+            for(i in params){
                 if(params.hasOwnProperty(i)){
                     tempnode.setAttribute(i, params[i]);
                 }
@@ -51,13 +53,13 @@ define (function (require, exports) {
 
         /*默认设置*/
         _config = {
-            method: "GET",
-            jsonp:
-            charset: "utf-8",
-            timeout: 10000,  // 默认10秒超时
-            data: {},
-            callback: function(){},
-            callbackHandler: ""
+            "method": "GET",
+            "jsonp": true      // True or False， 默认为 True
+            "charset": "utf-8",
+            "timeout": 10000,  // 默认10秒超时
+            "data": {},
+            "callback": function(){},
+            "callbackHandler": ""
         };
 
         /**
@@ -67,7 +69,7 @@ define (function (require, exports) {
           exports.ajax("http://qt.gtimg.cn/r=0.14779347437433898q=s_r_hkHSI,t_s_usDJI", {
               method: "GET",
               timeout: _TIMEOUT,
-              callback: function(){[window['s_r_hkHSI'], window['s_r_hkHSI']]},
+              callback: function(){console.log([window['s_r_hkHSI'], window['s_r_hkHSI']]);}
               
           });
 
@@ -75,7 +77,7 @@ define (function (require, exports) {
           exports.ajax("http://ip.jsontest.com/?callback=?", {
               method: "GET",
               timeout: _TIMEOUT,
-              callback: function(data){console.log(data))},
+              callback: function(data){console.log(data);}
           });
             
         * POST测试用例
@@ -99,7 +101,7 @@ define (function (require, exports) {
             exports.ajax("    testURL    ", {
                 method: "POST",
                 timeout: _TIMEOUT,
-                callback: function(data){console.log(data))},
+                callback: function(data){console.log(data);}
             });
         */
 
@@ -112,8 +114,8 @@ define (function (require, exports) {
     */
     exports.ajax = function (url, config) {
         var getMode, cbName, timer,
-            node, tempnode, iframe, form,
-            cfg = {};
+            node, iframe, form,
+            cfg = {}, i;
 
         $.extend(cfg, _config, config);
         cfg.method = cfg.method.toUpperCase();
@@ -136,7 +138,7 @@ define (function (require, exports) {
                 cfg.data._callback = cbName;
             }
 
-            for(var i in cfg.data){
+            for(i in cfg.data){
                 if(cfg.data.hasOwnProperty(i)){
                     _createElement("input", form, {
                         "type": "hidden",

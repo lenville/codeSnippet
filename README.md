@@ -11,3 +11,5 @@ Some useful code snippets
 * event_handler.js
 * for_in_loop.js
 * counter.js
+
+New - http.js

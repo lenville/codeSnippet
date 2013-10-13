@@ -1,92 +1,139 @@
 //! http.js
-//! Version : 0.0.2
+//! Version : 0.0.3
 //! Authors : Lenville
 //! Site: lenville.com
-//! New Features: 简化代码，进行高层次封装
-//! History: 
+//!	New Features: 修改0.0.2版本的post方法的控制方式改为传入options
+//!			  	  修改0.0.2版本的post方法的控制方式改为传入options
+//!			  	  优化代码实现
+//!	History:
+//!		0.0.2 简化代码，重新进行封装
 //!		0.0.1 仿照moment.js写http.js的post传递信息+回传 & jsonp实现
 
 define(function (require, exports) {
 
 	/************************************
-		常量 // Constants
+			常量 // Constants
 	************************************/
 
-	//常量设置
 	var OVERTIME_CODE = 404,
 		OVERTIME_MSG = "超时",
-		_TIMEOUT = 10000;
-	
+		_TIMEOUT = 5000;
 
 	/************************************
-		初始化 // Initialize
-	************************************/
-
-	//缩域设置
-	document.domain = "qq.com";
-
-	/************************************
-		Top Level Functions
-	************************************/
-	
-	exports.getJson = function (url, fn, timeout) {
-		var timeout = timeout || _TIMEOUT,					//超时初始化
-			rand = (Math.random().toString().substr(2, 5)),	//取随机数
-			callback = 'callback_' + rand,					//取回调名称
-			timer,											//其它杂项初始化
-			script = document.createElement("script");
-		script.setAttribute("src", url+'?callback='+callback);
-		document.head.appendChild(script);
-
-		window[callback] = function(data){
-			clearTimeout(timer);
-			fn(data);
-			window[callback] = null;
+			Top Level Functions
+	 ************************************	
+		var options = {
+			url: ,			// 必需
+			charset: ,
+			timeout: ,
+			data: ,			// post模式必需
+			context: 
 		}
-		//超时
-		timer = setTimeout(function(){
-			window[callback]({
-				code: OVERTIME_CODE,
-				msg: OVERTIME_MSG
-			});
-		},timeout);
+	************************************/
+
+	exports.get = function (options, callback) {
+		options = options || {};
+		var rand = (Math.random().toString().substr(2,5)),
+			cbName = options.cbName || "callback_" + rand,	// callback name
+			timeout = options.timeout || _TIMEOUT,
+			node = document.createElement("script"),
+			urlPat = /callback=\?/,
+			getMode = urlPat.test(options.url),	// 有callback为True，否则为False
+			head = document.head || document.getElementsByTagName("head")[0] || 
+				document.documentElement,
+			temObj = {},
+			timer, i;
+
+		node.src = getMode ? options.url.replace("callback=\?", "callback=" + 
+			cbName) : options.url;
+		// callback pattern array
+		node.cbPatArr = getMode ? "" : /q\=\s?/.exec(node.src);
+		// callback pattern
+		node.cbPat = getMode ? "" : node.src.substr(node.cbPatArr.index+2).split(",");
+		node.async = true;
+		node.id = cbName;
+		node.type = "text/javascript";
+		node.charset = options.charset || "utf-8";
+		node.onload = node.onerror = node.onreadystatechange = function() {
+			if (getMode) {
+				timer = setTimeout(function(){
+					head.removeChild(node);
+					window[cbName]({
+						code: OVERTIME_CODE,
+						msg: OVERTIME_MSG
+					});
+					window[cbName] = null;
+				},timeout);
+
+				window[cbName] = function(data){
+					clearTimeout(timer);
+					callback(data);
+					head.removeChild(node);
+					window[cbName] = null;
+				};
+			} else {
+
+				timer = setTimeout(function(){
+					head.removeChild(node);
+					callback({
+						code: OVERTIME_CODE,
+						msg: OVERTIME_MSG
+					});
+					window[cbName] = null;
+				}, timeout);
+
+				window[cbName] = function(){
+					clearTimeout(timer);
+					temObj = {};
+					for(i in node.cbPat){
+						temObj["v_"+node.cbPat[i]] = window["v_"+node.cbPat[i]];
+					}
+					callback(temObj);
+					window[cbName] = null;
+				};
+				window[cbName]();	
+			}
+				
+		};
+
+		head.appendChild(node);
 	};
 
-	exports.post = function (url, data, fn, timeout) {
-		
-		var timeout = timeout || _TIMEOUT,					//超时初始化
-			form, iframe, input = [],						//
-			rand = (Math.random().toString().substr(2, 5)),	//取随机数
-			callback = 'callback_' + rand,					//取回调名称
-			timer, counter;									//其它杂项初始化
+	exports.post = function (options, callback) {
+		options = options || {};
+		document.domain = "qq.com";
+		var timeout = options.timeout || _TIMEOUT,
+			rand = (Math.random().toString().substr(2, 5)),
+			cbName = "callback_" + rand,					// callback name
+			temp_obj = {},
+			form, iframe, timer, counter, temp_element, gcList, i, x;
 
-		/**/
 		var elementCreate = function(element, parent, params){
-			var temp_element = document.createElement(element);
-			for(var key in params){
-				if(params.hasOwnProperty(key)){
-					temp_element.setAttribute(key, params[key]);
+			temp_element = document.createElement(element);
+			for(counter in params){
+				if(params.hasOwnProperty(counter)){
+					temp_element.setAttribute(counter, params[counter]);
 				}
 			}
 			parent.appendChild(temp_element);
-			key=null;
+			counter=null;
 			return temp_element;
 		}
 
-		window[callback] = function(data){
+		window[cbName] = function(data){
 			clearTimeout(timer);
-			fn(data);
+			callback(data);
 
 			// 清理
 /*待更改：这样写是否OK，是否保留删除节点的功能*/
-			var gcList = ["frame" + "_" + rand, "form" + "_" + rand];//存放预清理节点ID
-			for (var i in gcList) {
+			gcList = ["frame" + "_" + rand, "form" + "_" + rand];//存放预清理节点ID
+			for (i in gcList) {
 				if(gcList[i]){
-					var x = document.getElementById(gcList[i]);
+					x = document.getElementById(gcList[i]);
 					x.parentNode.removeChild(x);
 				}
 			}
-			window[callback] = null;
+			window[cbName] = null;
 		};
 		
 		iframe = elementCreate("iframe", document.body, {
@@ -100,20 +147,20 @@ define(function (require, exports) {
 				"id": "form" + "_" + rand,
 				"name": "form" + "_" + rand,
 				"method": "post",
-				"action": url,
+				"action": options.url,
 				"target": "frame" + "_" + rand
 			}
 		);
 
-		if(!("_callback" in data)){
-			data["_callback"] = callback;
+		if(!("_callback" in options.data)){
+			options.data["_callback"] = cbName;
 		}
 
-		for(counter in data){
-			var temp_obj = {};
+		for(counter in options.data){
+			temp_obj = {};
 			temp_obj.type = "hidden";
 			temp_obj.name = counter;
-			temp_obj.value = data[counter];
+			temp_obj.value = options.data[counter];
 			elementCreate("input", form, temp_obj);
 			temp_obj = null;
 		}
@@ -122,7 +169,7 @@ define(function (require, exports) {
 
 		//超时
 		timer = setTimeout(function(){
-			window[callback]({
+			window[cbName]({
 				code: OVERTIME_CODE,
 				msg: OVERTIME_MSG
 			});

@@ -1,169 +1,195 @@
 /**http.js
- * Version : 0.1.1
+ * Version : 0.1.2
  * Authors : Lenville
  * Site: lenville.com 
- * New Features: 变量定义迁至ajax内部
- *               GET方法调整以及两种GET实现的支持调整
+ * New Features: Fix Bugs
  * History:
+ *      0.1.1 变量定义迁至ajax内部
+ *            GET方法调整以及两种GET实现的支持调整
  *      0.1.0 将get与post方法合并为ajax
  *            更正非JSON的get数据处理Bug
  *            精简代码，优化代码实现
- *      0.0.3 修改0.0.2版本的post方法的控制方式改为传入options
+ *      0.0.3 修改0.0.2版本的get方法的控制方式改为传入options
  *            修改0.0.2版本的post方法的控制方式改为传入options
  *            优化代码实现
- *		0.0.2 简化代码，重新进行封装
- *		0.0.1 仿照moment.js写http.js的post传递信息+回传 & jsonp实现
+ *      0.0.2 简化代码，重新进行封装
+ *      0.0.1 仿照moment.js写http.js的post传递信息+回传 & jsonp实现
  */
 
 define (function (require, exports) {
 
-	try{
-		document.domain = "qq.com";
-	}catch(ex){
-		// console.log(ex);
-	}
+    var 
+        /*常量*/
+        _count = 0,
+        _OVERTIME = {
+            "code": 404,
+            "msg": "超时"
+        },
 
-	var	
-		/*↓常量*/
-		_count = 0,
-		_TIMEOUT = 10000,
-		_OVERTIME_CODE = 404,
-		_OVERTIME_MSG = "超时",
+        /*Regular Expression*/
+        _RE_READY_STATE = /loaded|complete|undefined/,
 
-		/*↓Regular Expression*/
-		_RE_URL = /callback=\?/,
-		_RE_READY_STATE = /loaded|complete|undefined/,
+        /*节点操作*/
+        _doc = document,
+        _head = _doc.head ||
+                _doc.getElementsByTagName("head")[0] ||
+                _doc.documentElement,
+        _body = _doc.body ||
+                _doc.getElementsByTagName("body")[0] ||
+                _doc.documentElement,
 
-		/*↓节点操作*/
-		_doc = document,
-		_head = _doc.head ||
-				_doc.getElementsByTagName("head")[0] ||
-				_doc.documentElement,
-		_body = _doc.body ||
-				_doc.getElementsByTagName("body")[0] ||
-				_doc.documentElement,
+        _createElement = function (element, parent, params) {
+            var tempnode = _doc.createElement(element);
+            for(var i in params){
+                if(params.hasOwnProperty(i)){
+                    tempnode.setAttribute(i, params[i]);
+                }
+            }
+            parent.appendChild(tempnode);
+            return tempnode;
+        },
 
-		_createElement = function (element, parent, params) {
-			tempnode = _doc.createElement(element);
-			tempnode.id = [element, _count].join("_");
-			tempnode.name = [element, _count].join("_");
-			for(var i in params){
-				if(params.hasOwnProperty(i)){
-					tempnode.setAttribute(i, params[i]);
-				}
-			}
-			parent.appendChild(tempnode);
-			return tempnode;
-		},
-		_defaultCb = function (data) {
-			console.log(data);
-		},
+        /*默认设置*/
+        _config = {
+            method: "GET",
+            jsonp:
+            charset: "utf-8",
+            timeout: 10000,  // 默认10秒超时
+            data: {},
+            callback: function(){},
+            callbackHandler: ""
+        };
 
-		/*↓基本设置*/
-		_config = {
-			method: "GET",
-			charset: "utf-8",
-			timeout: _TIMEOUT,
-			data: {stocklist: "ok"},
-			callback: _defaultCb,
-			context: {}
-		};
+        /**
+        * exports.ajax(url, [config]) config默认为_config，可以传入任何key/value对覆盖
+        *
+        * 无callback的GET测试用例
+          exports.ajax("http://qt.gtimg.cn/r=0.14779347437433898q=s_r_hkHSI,t_s_usDJI", {
+              method: "GET",
+              timeout: _TIMEOUT,
+              callback: function(){[window['s_r_hkHSI'], window['s_r_hkHSI']]},
+              
+          });
 
-	/*Dora.ajax(url, [settings])*/
-	exports.ajax = function (url, config) {
-		var getMode, cbName, timer,
-			node, tempnode, iframe, form,
-			cfg = {};
+        * 有callback的GET测试用例
+          exports.ajax("http://ip.jsontest.com/?callback=?", {
+              method: "GET",
+              timeout: _TIMEOUT,
+              callback: function(data){console.log(data))},
+          });
+            
+        * POST测试用例
+          //! 使用前将如下内容写入任意域中的  testURL
+                    <script>
+                        try{
+            ↑→→→→→→→→→→     document.domain = "test.com";
+            ↑               window.parent.<?php echo $_POST["_callback"]; ?>(
+            ↑                   <?php
+            ↑                       if (true) {
+            ↑                           echo "{'code': 0, 'msg': 'success'}";
+            ↑                       }else{
+            ↑                           echo "{'code': 1, 'msg': 'fail'}";
+            ↑                       }
+            ↑                    ?>
+            ↑               );
+            ↑           }
+            ↑           catch(err){}
+            ↑       </script>
+            调用时缩域设置：document.domain = "test.com"
+            exports.ajax("    testURL    ", {
+                method: "POST",
+                timeout: _TIMEOUT,
+                callback: function(data){console.log(data))},
+            });
+        */
 
-		$.extend(cfg, _config, config);
-		cbName = [cfg.method, _count++].join("_");
+    /**
+    * @class 一个通信类
+    * @constructor
+    * @param {String} 通信地址
+    * @param {Object} 通信配置
+    * @return undefined
+    */
+    exports.ajax = function (url, config) {
+        var getMode, cbName, timer,
+            node, tempnode, iframe, form,
+            cfg = {};
 
-		if (cfg.method === "POST") {
+        $.extend(cfg, _config, config);
+        cfg.method = cfg.method.toUpperCase();
+        cbName = [cfg.method, _count++].join("_");
 
-			iframe = _createElement("iframe", _body, {
-				"style": "display: none"
-			});
-			form = _createElement("form", _body, {
-				"method": "post",
-				"action": url,
-				"target": ["iframe", _count].join("_")
-			});
+        if (cfg.method === "POST") {
 
-			if(!("_callback" in cfg.data)){
-				cfg.data._callback = cbName;
-			}
+            iframe = _createElement("iframe", _body, {
+                "style": "display: none"
+                "id": ["iframe", _count].join("_"),
+                "name": ["iframe", _count].join("_")
+            });
+            form = _createElement("form", _body, {
+                "method": "post",
+                "action": url,
+                "target": ["iframe", _count].join("_")
+            });
 
-			for(var i in cfg.data){
-				if(cfg.data.hasOwnProperty(i)){
-					tempnode = {};
-					tempnode.type = "hidden";
-					tempnode.name = i;
-					tempnode.value = cfg.data[i];
-					_createElement("input", form, tempnode);
-					tempnode = null;
-				}
-			}
-			
-			window[cbName] = function(data){
-				clearTimeout(timer);
-				_body.removeChild(iframe);
-				_body.removeChild(form);
-				iframe = undefined;
-				form = undefined;
-				cfg.callback(data);
-			};
+            if(!("_callback" in cfg.data)){
+                cfg.data._callback = cbName;
+            }
 
-			form.submit();
+            for(var i in cfg.data){
+                if(cfg.data.hasOwnProperty(i)){
+                    _createElement("input", form, {
+                        "type": "hidden",
+                        "name": i,
+                        "value": cfg.data[i]
+                    });
+                }
+            }
+            
+            window[cbName] = function(data){
+                clearTimeout(timer);
+                _body.removeChild(iframe);
+                _body.removeChild(form);
+                iframe = undefined;
+                form = undefined;
+                cfg.callback(data);
+            };
 
-			timer = setTimeout(function(){
-				_body.removeChild(iframe);
-				_body.removeChild(form);
-				iframe = undefined;
-				form = undefined;
-				window[cbName]({
-					code: _OVERTIME_CODE,
-					msg: _OVERTIME_MSG
-				});
-			}, cfg.timeout);
+            form.submit();
 
-		} else if (cfg.method === "GET") {
+            timer = setTimeout(function(){
+                window[cbName](_OVERTIME);
+            }, cfg.timeout);
 
-			getMode = _RE_URL.test(url),	// 有callback为True，否则为False
+        } else if (cfg.method === "GET") {
 
-			node = _doc.createElement('script');
-			node.id = cbName;
-			node.async = true;
-			node.charset = cfg.charset;
-			node.onload = node.onerror = node.onreadystatechange = function() {
-				if (_RE_READY_STATE.test(node.readyState)) {
-					window[cbName]();
-				}
-			};
-			node.src = getMode ? url.replace("callback=?", "callback=" + cbName) : url;
+            getMode = /callback=\?/.test(url),      // 有callback为True，否则为False
 
-			window[cbName] = function(data){
-				clearTimeout(timer);
-				node.onload = node.onerror = node.onreadystatechange = null;
-				_head.removeChild(node);
-				node = undefined;
-				if (getMode) {
-					cfg.callback(data);
-				} else {
-					cfg.callback(window[cfg.context]);
-				}
-			};
+            node = _doc.createElement('script');
+            node.id = cbName;
+            node.async = true;
+            node.charset = cfg.charset;
+            node.onload = node.onerror = node.onreadystatechange = function() {
+                if (_RE_READY_STATE.test(node.readyState)) {
+                    window[cbName]();               // #TOTEST
+                }
+            };
+            node.src = getMode ? url.replace("callback=?", "callback=" + cbName) : url;
 
-			_head.appendChild(node);
+            window[cbName] = function(data){
+                clearTimeout(timer);
+                node.onload = node.onerror = node.onreadystatechange = null;
+                _head.removeChild(node);
+                node = undefined;
+                cfg.callback(data);
+            };
 
-			timer = setTimeout(function(){
-				node.onload = node.onerror = node.onreadystatechange = null;
-				_head.removeChild(node);
-				cfg.callback({
-					code: _OVERTIME_CODE,
-					msg: _OVERTIME_MSG
-				});
-				window[cbName] = null;
-			}, cfg.timeout);
-		}		
-	};
+            _head.appendChild(node);
+
+            timer = setTimeout(function(){
+                window[cbName](_OVERTIME);
+                window[cbName] = null;
+            }, cfg.timeout);
+        }       
+    };
 });

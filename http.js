@@ -54,7 +54,7 @@ define (function (require, exports) {
         /*默认设置*/
         _config = {
             "method": "GET",
-            "jsonp": true      // True or False， 默认为 True
+            "jsonp": true,      // True or False， 默认为 True
             "charset": "utf-8",
             "timeout": 10000,  // 默认10秒超时
             "data": {},
@@ -124,7 +124,7 @@ define (function (require, exports) {
         if (cfg.method === "POST") {
 
             iframe = _createElement("iframe", _body, {
-                "style": "display: none"
+                "style": "display: none",
                 "id": ["iframe", _count].join("_"),
                 "name": ["iframe", _count].join("_")
             });
